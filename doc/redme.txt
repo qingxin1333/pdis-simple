@@ -1,0 +1,2 @@
+#启动进入环境
+source /mnt/d/workspaceAI/pyAiTest/.venv/bin/activate

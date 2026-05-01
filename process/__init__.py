@@ -9,10 +9,12 @@ from .config import (
     MODEL_LLM_B, 
     MODEL_LLM_C,
     MODEL_LLM_D,
+    MODEL_EMBEDDING,
     STORAGE_FILE,
     REQUEST_TIMEOUT,
     OLLAMA_ENDPOINT,
-    ENNEAGRAM_SYSTEM
+    DATABASE_URL,
+    MBTI_SYSTEM,
 )
 
 # 核心基础组件
@@ -25,19 +27,18 @@ from .llm_b_condition_checker import LLM_B_ConditionChecker
 from .llm_c_profile_generator import LLM_C_ProfileGenerator
 from .llm_d_decision_analyzer import LLM_D_DecisionAnalyzer
 
-# 主流程控制器
-from main import PDISPipeline
-
 __all__ = [
     # 配置
     'MODEL_LLM_A',
     'MODEL_LLM_B',
     'MODEL_LLM_C',
     'MODEL_LLM_D',
+    'MODEL_EMBEDDING',
     'STORAGE_FILE',
     'REQUEST_TIMEOUT',
     'OLLAMA_ENDPOINT',
-    'ENNEAGRAM_SYSTEM',
+    'DATABASE_URL',
+    'MBTI_SYSTEM',
     
     # 核心组件
     'ReportManager',
@@ -49,8 +50,6 @@ __all__ = [
     'LLM_C_ProfileGenerator',
     'LLM_D_DecisionAnalyzer',
     
-    # 主控制器
-    'PDISPipeline'
 ]
 
 # 版本信息

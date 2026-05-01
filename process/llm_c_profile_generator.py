@@ -1,18 +1,18 @@
 """
 LLM C模块：人物档案生成器
-基于九型人格系统生成详细的人物性格档案
+基于 MBTI 16 型人格生成详细的人物侧写档案
 """
 
 import json
 from typing import Dict, Any
 from .ollama_client import OllamaClient
-from .config import MODEL_LLM_C, ENNEAGRAM_SYSTEM
+from .config import MODEL_LLM_C, MBTI_SYSTEM
 
 
 class LLM_C_ProfileGenerator:
     """
     LLM C: 人物档案生成引擎
-    核心功能：根据人物描述生成基于九型人格系统的详细档案
+    核心功能：根据人物描述生成基于 MBTI 16 型人格系统的详细档案
     """
 
     def __init__(self):
@@ -36,9 +36,9 @@ class LLM_C_ProfileGenerator:
 
         prompt = f"""
 You are a professional personality profiling engine.
-Analyze the ENTIRE USER INPUT to determine personality type using the Enneagram system (nine personality types).
+Analyze the ENTIRE USER INPUT to infer MBTI type and a structured portrait for the target person.
 
-{ENNEAGRAM_SYSTEM}
+{MBTI_SYSTEM}
 
 PERSON KEY: {person_key}
 DESCRIPTION: {description}
@@ -49,42 +49,38 @@ FULL USER INPUT CONTEXT (for reference):
 INSTRUCTIONS:
 1. ONLY focus on the person with key "{person_key}" and their role in the context.
 2. Analyze their behavior, attitude, and interactions mentioned in the full context.
-3. Determine the Enneagram type based on the description provided:
-   - Use the nine types listed above (perfect/helpful/accomplished/romantic/observational/skeptical/hedonic/leadership/peaceful)
-4. Extract core traits, communication style, decision focus, strengths, and weaknesses.
-5. Use ONLY the information provided in the full context (do not assume).
-6. If information is insufficient for any field, leave it as empty string or empty list.
-7. Return ONLY the JSON object, no additional text.
-8. ADD A NEW FIELD "personality_original" THAT CONTAINS THE PERSONALITY TYPE IN THE ORIGINAL LANGUAGE OF THE INPUT:
-   - If the input is in Chinese (contains Chinese characters), use the Chinese term from the system description (e.g., "领导型")
-   - DO NOT use Japanese, English, or any other language for personality_original
-   - ALWAYS use Chinese for personality_original when input contains Chinese characters
-
-EXAMPLES (for reference):
-- If input is in Chinese: "技术部负责人，对节能算法项目感兴趣，喜欢主动推动技术讨论，关注细节，善于沟通" 
-  → personality_color: "leadership", personality_original: "领导型"
-
-- If input is in Chinese: "后端负责人是个公司员老，感觉对我的态度不热情，也没有故意针对，时间有限，不想搞事情。"
-  → personality_color: "peaceful", personality_original: "和平型"
+3. Infer MBTI type (e.g., INTJ/ENFP) ONLY if evidence is present. Otherwise keep type empty and confidence low.
+4. Provide evidence bullets that justify the MBTI inference.
+5. Extract core traits, communication style, decision focus, strengths, weaknesses, triggers, and predicted behaviors.
+6. Use ONLY the information provided in the full context (do not assume).
+7. If information is insufficient for any field, leave it as empty string or empty list.
+8. Return ONLY the JSON object, no additional text.
+9. If the input contains Chinese characters, all strings in the output must be Chinese (no English).
 
 OUTPUT_SCHEMA:
 {{
   "person_key": "{person_key}",
   "identity_summary": "1-2 sentence summary of this person's role and key characteristics",
-  "personality_report": {{
-    "core_traits": ["trait1", "trait2", ...],
-    "communication_style": "how they communicate (e.g., direct, diplomatic)",
-    "decision_focus": "what they prioritize in decisions",
-    "personality_color": "perfect/helpful/accomplished/romantic/observational/skeptical/hedonic/leadership/peaceful",
-    "personality_original": "type in original language (MUST be Chinese if input contains Chinese characters)",
-    "strengths": ["strength1", "strength2", ...],
-    "weaknesses": ["weakness1", "weakness2", ...]
+  "mbti": {{
+    "type": "",
+    "confidence": 0.0,
+    "evidence": ["evidence1", "evidence2"]
   }},
-  "profiling_report": {{
-    "decision_drivers": ["what drives their decisions"],
-    "pressure_points": ["what causes stress for them"],
-    "likely_reactions": ["how they might react in key scenarios"]
-  }}
+  "traits": {{
+    "core_traits": ["trait1", "trait2"],
+    "communication_style": "",
+    "decision_focus": "",
+    "strengths": ["strength1", "strength2"],
+    "weaknesses": ["weakness1", "weakness2"],
+    "triggers": ["trigger1", "trigger2"]
+  }},
+  "behavior_predictions": [
+    {{
+      "scenario": "a scenario description",
+      "prediction": "likely behavior",
+      "confidence": 0.0
+    }}
+  ]
 }}
 """
         print(f"\n================ LLM C - 生成人物档案 - {person_key} ================")

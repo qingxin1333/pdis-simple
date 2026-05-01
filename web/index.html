@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>PDIS</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body>
+    <div class="layout">
+      <aside class="sidebar">
+        <div class="sbTop">
+          <div class="sbBrand">千问</div>
+          <div class="sbActions">
+            <button class="iconBtn" id="newChat" title="新建对话">＋</button>
+          </div>
+        </div>
+
+        <div class="sbSection">
+          <div class="sbTitle">历史对话</div>
+          <div class="sbList" id="historyList"></div>
+        </div>
+      </aside>
+
+      <main class="main">
+        <header class="topbar">
+          <div class="topLeft">
+            <div class="brand">PDIS</div>
+            <button class="modelBtn" id="modelBtn">Qwen3 · PDIS</button>
+          </div>
+          <div class="topRight">
+            <span id="userInfo" class="userInfo"></span>
+            <button class="ghostBtn" id="logoutBtn" style="display: none;">登出</button>
+            <button class="ghostBtn" id="toggleRuns">运行详情</button>
+          </div>
+        </header>
+
+        <section class="stage">
+          <div class="empty" id="emptyState">
+            <div class="hello">你好，我是 PDIS</div>
+          </div>
+
+          <div class="chatWrap" id="chatWrap">
+            <div class="chat" id="chat"></div>
+          </div>
+
+          <div class="composerDock">
+            <div class="composer">
+              <div class="composerInput">
+                <button class="iconBtn" id="pickFiles" title="上传附件">＋</button>
+                <textarea id="input" placeholder="请输入问题…" rows="2"></textarea>
+                <button class="sendBtn" id="send">发送</button>
+                <input id="file" type="file" multiple hidden />
+              </div>
+              <div class="attachRow" id="attachRow"></div>
+              <div class="modeRow">
+                <button class="mode active" data-mode="SMART_ANALYSIS">智能分析</button>
+                <button class="mode" data-mode="RELATION_MGMT">关系管理</button>
+                <button class="mode" data-mode="BEHAVIOR_PRED">行为预测</button>
+                <button class="mode" data-mode="DECISION_ASSIST">决策辅助</button>
+              </div>
+            </div>
+            <div class="runMeta" id="runMeta">就绪</div>
+          </div>
+        </section>
+      </main>
+
+      <aside class="drawer" id="drawer">
+        <div class="drawerHeader">
+          <div class="drawerTitle">运行详情</div>
+          <button class="iconBtn" id="closeDrawer" title="关闭">×</button>
+        </div>
+        <div class="drawerBody">
+          <div class="drawerSection">
+            <div class="drawerLabel">计划摘要</div>
+            <ul class="list" id="planList"></ul>
+          </div>
+          <div class="drawerSection">
+            <div class="drawerLabel">工具执行</div>
+            <div class="toolRuns" id="toolRuns"></div>
+          </div>
+          <div class="drawerSection">
+            <div class="drawerLabel">记忆注入</div>
+            <pre class="pre" id="memoryCtx"></pre>
+          </div>
+        </div>
+      </aside>
+      <div class="backdrop" id="backdrop"></div>
+    </div>
+
+    <script src="/static/app.js"></script>
+  </body>
+</html>

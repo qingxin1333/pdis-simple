@@ -5,8 +5,8 @@ LLM客户端模块
 
 import requests
 import json
-from typing import Dict, Any
-from .config import OLLAMA_ENDPOINT, REQUEST_TIMEOUT
+from typing import Dict, Any, List, Optional
+from .config import OLLAMA_ENDPOINT, REQUEST_TIMEOUT, MODEL_EMBEDDING
 
 
 class OllamaClient:
@@ -62,6 +62,30 @@ class OllamaClient:
         except Exception as e:
             print(f"❌ 未知错误: {str(e)}")
             return {}
+
+    @staticmethod
+    def embed(text: str, model_name: str = MODEL_EMBEDDING) -> Optional[List[float]]:
+        base = OLLAMA_ENDPOINT
+        if "/api/" in base:
+            base = base.split("/api/")[0]
+
+        for url in (f"{base}/api/embeddings", f"{base}/api/embed"):
+            try:
+                response = requests.post(
+                    url,
+                    json={"model": model_name, "prompt": text},
+                    timeout=REQUEST_TIMEOUT,
+                )
+                if response.status_code >= 400:
+                    continue
+                payload = response.json()
+                vec = payload.get("embedding")
+                if isinstance(vec, list) and vec and isinstance(vec[0], (int, float)):
+                    return [float(x) for x in vec]
+            except Exception:
+                continue
+
+        return None
 
 
 # 用于测试

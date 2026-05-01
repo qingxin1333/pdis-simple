@@ -4,7 +4,7 @@ LLM D模块：决策分析器
 """
 
 import json
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 from .ollama_client import OllamaClient
 from .config import MODEL_LLM_D
 from .report_manager import ReportManager
@@ -23,10 +23,13 @@ class LLM_D_DecisionAnalyzer:
         """
         self.report_manager = report_manager
 
-    def analyze_decision(self, 
-                        scenario_summary: str, 
-                        identified_persons: List[Dict[str, Any]], 
-                        person_registry: Dict[str, Any]) -> str:
+    def analyze_decision(
+        self,
+        scenario_summary: str,
+        identified_persons: List[Dict[str, Any]],
+        person_registry: Dict[str, Any],
+        memory_context: Optional[str] = None,
+    ) -> Dict[str, Any]:
         """
         执行重大决策可行性分析
         :param scenario_summary: 场景摘要
@@ -56,23 +59,27 @@ class LLM_D_DecisionAnalyzer:
             "target_profiles": target_profiles
         }
 
+        memory_text = memory_context or ""
         # 构建提示词
         prompt = f"""
 You are a strategic decision analysis engine.
-Analyze the scenario using ONLY the provided profiles, including personality_original, strengths, and weaknesses.
-Focus on how these factors affect interactions and decision-making.
+Analyze the scenario using ONLY the provided profiles, especially MBTI evidence, traits, strengths, and weaknesses.
+Focus on how these factors affect interactions and decision-making. If MBTI is missing or low-confidence, rely on observed behaviors.
 
 HISTORICAL CONTEXT (from previous analyses):
 {history_context}
+
+# RETRIEVED MEMORY CONTEXT (RAG, may be empty):
+{memory_text}
 
 # PERSON_NAME_MAPPING (请用此映射替换所有person_key):
 {mapping_str}
 
 INSTRUCTIONS:
-1. If personality_color, strengths, or weaknesses are missing for a person, skip personality-based analysis for that person.
-2. For each person with personality_original, reference their personality_original when explaining reactions.
+1. If MBTI or traits are missing for a person, do not invent them; use only observed facts.
+2. For each person with mbti.type, reference it when explaining reactions, but keep the explanation evidence-based.
 3. Use strengths and weaknesses to provide nuanced advice.
-4. Provide actionable advice based on personality dynamics.
+4. Provide actionable advice based on personality dynamics and constraints.
 5. If critical information is missing, state it clearly in the analysis.
 6. All output languages must be consistent with the input language
 7. Character titles must use the original input name (e.g. if the user inputs "技术部负责人", use "技术部负责人")
@@ -88,6 +95,7 @@ OUTPUT_SCHEMA:
   "key_reasons": [],
   "execution_plan": [],
   "risks": [],
+  "suggested_scripts": [],
   "missing_info": []
 }}
 """
@@ -102,7 +110,7 @@ OUTPUT_SCHEMA:
         # 二次替换 - 用原始人名替换所有person_key
         for key, original_name in name_mapping.items():
             # 替换所有字段中的person_key
-            for field in ['key_reasons', 'execution_plan', 'risks', 'missing_info']:
+            for field in ['key_reasons', 'execution_plan', 'risks', 'suggested_scripts', 'missing_info']:
                 if field in result and isinstance(result[field], list):
                     result[field] = [
                         s.replace(key, original_name)
@@ -121,10 +129,11 @@ OUTPUT_SCHEMA:
             f"关键原因：{', '.join(result.get('key_reasons', []))}\n"
             f"执行计划：{', '.join(result.get('execution_plan', []))}\n"
             f"风险：{', '.join(result.get('risks', []))}\n"
+            f"话术建议：{', '.join(result.get('suggested_scripts', []))}\n"
             f"缺失信息：{', '.join(result.get('missing_info', []))}"
         )
 
-        return client_report
+        return {"structured": result, "client_report": client_report}
 
 
 # 用于测试

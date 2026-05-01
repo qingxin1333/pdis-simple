@@ -4,12 +4,16 @@ PDIS主流程控制器
 """
 
 import json
+import os
 from typing import Dict, Any, List
 from process.report_manager import ReportManager
 from process.llm_a_input_decomposer import LLM_A_InputDecomposer
 from process.llm_b_condition_checker import LLM_B_ConditionChecker
 from process.llm_c_profile_generator import LLM_C_ProfileGenerator
 from process.llm_d_decision_analyzer import LLM_D_DecisionAnalyzer
+from process.config import DATABASE_URL, DEFAULT_USER_EMAIL, DEFAULT_USER_DISPLAY_NAME
+from process.ollama_client import OllamaClient
+from process.postgres_store import PostgresStore
 
 
 class PDISPipeline:
@@ -18,10 +22,11 @@ class PDISPipeline:
     整合所有LLM模块，执行完整的个人决策分析流程
     """
 
-    def __init__(self, storage_file: str = "full_reports.json"):
+    def __init__(self, storage_file: str = "full_reports.json", user_id: str = None):
         """
         初始化PDIS流程管道
         :param storage_file: 报告存储文件路径
+        :param user_id: 用户ID（从认证系统传入）
         """
         # 初始化核心组件
         self.report_manager = ReportManager(storage_file)
@@ -29,12 +34,29 @@ class PDISPipeline:
         self.llm_b = LLM_B_ConditionChecker()
         self.llm_c = LLM_C_ProfileGenerator()
         self.llm_d = LLM_D_DecisionAnalyzer(self.report_manager)
-        
+
         # 数据存储
         self.person_registry = {}  # 人物档案库
         self.current_context = None  # 当前分析上下文
+        self.tool_runs: List[Dict[str, Any]] = []
+        self.plan_summary: List[str] = []
 
-    def run_full_pipeline(self, user_input: str = None) -> str:
+        self.store = None
+        self.user_id = user_id
+        if DATABASE_URL:
+            try:
+                self.store = PostgresStore(DATABASE_URL)
+                self.store.ensure_schema()
+                # 如果没有传入user_id，使用默认用户（向后兼容）
+                if not self.user_id:
+                    user = self.store.ensure_default_user(DEFAULT_USER_EMAIL, DEFAULT_USER_DISPLAY_NAME)
+                    self.user_id = user.id
+            except Exception as e:
+                print(f"⚠️ Postgres 不可用，将回退到文件存储: {e}")
+                self.store = None
+                self.user_id = None
+
+    def run_full_pipeline(self, user_input: str = None, return_structured: bool = False):
         """
         执行完整的PDIS分析流程
         :param user_input: 用户输入文本（如果为None则使用默认测试输入）
@@ -53,6 +75,14 @@ class PDISPipeline:
         decomposed = self.llm_a.decompose_input(user_input)
         self.current_context = decomposed
 
+        # 2.5️⃣ 记忆检索（RAG）
+        memory_context = self._retrieve_memory_context(user_input)
+        self.plan_summary = self._build_plan_summary(decomposed, memory_context)
+        print("\n================ Plan Summary ================")
+        for s in self.plan_summary:
+            print(f"- {s}")
+        self.tool_runs.append({"tool": "plan_summary", "status": "ok", "steps": self.plan_summary})
+
         # 3️⃣ 检查并生成缺失人物档案
         self._generate_missing_profiles(decomposed)
 
@@ -62,15 +92,24 @@ class PDISPipeline:
         # 5️⃣ 信息补充处理
         if not readiness.get("ready", False):
             print("\n================ 需要补充信息 ================")
-            final_result = self._handle_information_supplement(user_input, decomposed, readiness)
+            final_result = self._handle_information_supplement(user_input, decomposed, readiness, memory_context)
         else:
             # 6️⃣ 直接执行决策分析
             print("\n================ 执行最终决策分析 ================")
-            final_result = self._execute_decision_analysis(decomposed)
+            final_result = self._execute_decision_analysis(decomposed, memory_context)
 
         # 7️⃣ 输出最终结果
         self._print_final_results(final_result)
-        return final_result
+        self._persist_memory(user_input, decomposed, final_result)
+        if return_structured:
+            return {
+                "plan_summary": self.plan_summary,
+                "tool_runs": self.tool_runs,
+                "memory_context": memory_context,
+                "decomposed": decomposed,
+                "result": final_result,
+            }
+        return final_result.get("client_report", "")
 
     def _get_default_user_input(self) -> str:
         """获取默认测试输入"""
@@ -84,6 +123,20 @@ class PDISPipeline:
             person_key = person["person_key"]
             # 仅当人物档案不存在时生成
             if person_key not in self.person_registry:
+                if self.store and self.user_id:
+                    try:
+                        existing = self.store.get_person_profile(self.user_id, person_key)
+                        if existing and existing.get("portrait"):
+                            self.person_registry[person_key] = existing["portrait"]
+                            self.tool_runs.append(
+                                {"tool": "get_person_profile", "status": "ok", "person_key": person_key}
+                            )
+                            continue
+                    except Exception as e:
+                        self.tool_runs.append(
+                            {"tool": "get_person_profile", "status": "error", "person_key": person_key, "error": str(e)}
+                        )
+
                 print(f"\n⚠️ 人物档案缺失: {person_key}")
                 # 设置上下文
                 self.llm_c.set_context(decomposed)
@@ -94,8 +147,38 @@ class PDISPipeline:
                 )
                 self.person_registry[person_key] = profile
 
-    def _handle_information_supplement(self, user_input: str, decomposed: Dict[str, Any], 
-                                     readiness: Dict[str, Any]) -> str:
+                if self.store and self.user_id:
+                    try:
+                        display_name = person.get("original_name") or person.get("mention") or person_key
+                        person_id = self.store.upsert_person_profile(
+                            self.user_id,
+                            person_key=person_key,
+                            display_name=display_name,
+                        )
+                        emb = OllamaClient.embed(json.dumps(profile, ensure_ascii=False)[:2000])
+                        mbti = profile.get("mbti") or {}
+                        self.store.insert_person_profile_version(
+                            person_id=person_id,
+                            portrait=profile,
+                            mbti_type=mbti.get("type") or None,
+                            mbti_confidence=mbti.get("confidence"),
+                            portrait_embedding=emb,
+                        )
+                        self.tool_runs.append(
+                            {"tool": "upsert_person_profile", "status": "ok", "person_key": person_key}
+                        )
+                    except Exception as e:
+                        self.tool_runs.append(
+                            {"tool": "upsert_person_profile", "status": "error", "person_key": person_key, "error": str(e)}
+                        )
+
+    def _handle_information_supplement(
+        self,
+        user_input: str,
+        decomposed: Dict[str, Any],
+        readiness: Dict[str, Any],
+        memory_context: str,
+    ) -> Dict[str, Any]:
         """处理信息补充流程"""
         # 生成补充提示
         supplement_prompts = self.llm_b.generate_supplement_prompt(
@@ -119,7 +202,7 @@ class PDISPipeline:
         self._generate_missing_profiles(decomposed)
 
         # 执行决策分析
-        return self._execute_decision_analysis(decomposed)
+        return self._execute_decision_analysis(decomposed, memory_context)
 
     def _simulate_user_supplement(self, missing_fields: List[str]) -> str:
         """模拟用户补充信息（测试用）"""
@@ -138,24 +221,109 @@ class PDISPipeline:
         
         return " | ".join(supplements)
 
-    def _execute_decision_analysis(self, decomposed: Dict[str, Any]) -> str:
+    def _execute_decision_analysis(self, decomposed: Dict[str, Any], memory_context: str) -> Dict[str, Any]:
         """执行决策分析"""
-        return self.llm_d.analyze_decision(
+        result = self.llm_d.analyze_decision(
             scenario_summary=decomposed.get("scenario_summary", ""),
             identified_persons=decomposed.get("identified_persons", []),
-            person_registry=self.person_registry
+            person_registry=self.person_registry,
+            memory_context=memory_context,
         )
+        if self.store and self.user_id:
+            try:
+                self.store.insert_decision_record(
+                    user_id=self.user_id,
+                    scenario_summary=decomposed.get("scenario_summary", ""),
+                    user_input=decomposed.get("user_text", ""),
+                    structured_result=result.get("structured", {}),
+                    persons_involved=decomposed.get("identified_persons", []),
+                    model_trace={"plan_summary": self.plan_summary, "tool_runs": self.tool_runs},
+                )
+                self.tool_runs.append({"tool": "insert_decision_record", "status": "ok"})
+            except Exception as e:
+                self.tool_runs.append({"tool": "insert_decision_record", "status": "error", "error": str(e)})
+        return result
 
-    def _print_final_results(self, final_result: str):
+    def _print_final_results(self, final_result: Dict[str, Any]):
         """打印最终结果"""
         print("\n================ 最终决策分析 ================")
-        print(final_result)
+        print(final_result.get("client_report", ""))
         
         # 打印报告管理信息
         print("\n" + "=" * 50)
         print("报告已保存到:", self.report_manager.storage_file)
         print("报告摘要:", self.report_manager.get_context("decision_analysis"))
         print("=" * 50)
+
+    def _retrieve_memory_context(self, user_input: str) -> str:
+        if not (self.store and self.user_id):
+            return ""
+
+        emb = OllamaClient.embed(user_input[:4000])
+        if not emb:
+            self.tool_runs.append({"tool": "embed", "status": "error", "error": "no_embedding"})
+            return ""
+
+        try:
+            hits = self.store.semantic_search(self.user_id, emb, top_k=6)
+            self.tool_runs.append({"tool": "semantic_search", "status": "ok", "hits": len(hits)})
+        except Exception as e:
+            self.tool_runs.append({"tool": "semantic_search", "status": "error", "error": str(e)})
+            return ""
+
+        lines = []
+        for h in hits:
+            kind = h.get("kind", "")
+            content = (h.get("content") or "").strip()
+            if not content:
+                continue
+            lines.append(f"[{kind}] {content[:400]}")
+
+        return "\n".join(lines)
+
+    def _persist_memory(self, user_input: str, decomposed: Dict[str, Any], final_result: Dict[str, Any]) -> None:
+        if not (self.store and self.user_id):
+            return
+
+        self_input_emb = OllamaClient.embed(user_input[:4000])
+        self.store.upsert_memory_chunk(
+            user_id=self.user_id,
+            kind="chat_input",
+            content=user_input[:4000],
+            embedding=self_input_emb,
+        )
+
+        scenario = decomposed.get("scenario_summary", "") or ""
+        if scenario:
+            scenario_emb = OllamaClient.embed(scenario[:2000])
+            self.store.upsert_memory_chunk(
+                user_id=self.user_id,
+                kind="scenario",
+                content=scenario[:2000],
+                embedding=scenario_emb,
+            )
+
+        structured = final_result.get("structured") or {}
+        decision_brief = json.dumps(structured, ensure_ascii=False)[:2000]
+        decision_emb = OllamaClient.embed(decision_brief)
+        self.store.upsert_memory_chunk(
+            user_id=self.user_id,
+            kind="decision",
+            content=decision_brief,
+            embedding=decision_emb,
+        )
+
+    def _build_plan_summary(self, decomposed: Dict[str, Any], memory_context: str) -> List[str]:
+        steps = ["识别目标、约束与涉及人物"]
+        if memory_context:
+            steps.append("从长期记忆中召回相关人物/事件/历史记录（RAG）")
+        else:
+            steps.append("尝试从长期记忆召回相关信息（若无命中则跳过）")
+        if decomposed.get("identified_persons"):
+            steps.append("补齐人物侧写（MBTI+行为证据），必要时更新档案版本")
+        steps.append("生成可行性判断、行动步骤、风险点与话术建议")
+        steps.append("沉淀本次对话、引用记忆与结论到历史与记忆库")
+        return steps
 
     def get_person_registry(self) -> Dict[str, Any]:
         """获取当前人物档案库"""

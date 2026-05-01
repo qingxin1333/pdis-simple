@@ -1,0 +1,256 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>PDIS - 登录</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+    <style>
+      body {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 100vh;
+        margin: 0;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+      .login-container {
+        background: white;
+        border-radius: 12px;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+        padding: 40px;
+        width: 100%;
+        max-width: 400px;
+      }
+      .login-header {
+        text-align: center;
+        margin-bottom: 30px;
+      }
+      .login-header h1 {
+        color: #333;
+        margin: 0 0 10px 0;
+        font-size: 28px;
+      }
+      .login-header p {
+        color: #666;
+        margin: 0;
+        font-size: 14px;
+      }
+      .form-group {
+        margin-bottom: 20px;
+      }
+      .form-group label {
+        display: block;
+        margin-bottom: 8px;
+        color: #333;
+        font-weight: 500;
+        font-size: 14px;
+      }
+      .form-group input {
+        width: 100%;
+        padding: 12px;
+        border: 1px solid #ddd;
+        border-radius: 6px;
+        font-size: 14px;
+        box-sizing: border-box;
+        transition: border-color 0.3s;
+      }
+      .form-group input:focus {
+        outline: none;
+        border-color: #667eea;
+      }
+      .btn {
+        width: 100%;
+        padding: 12px;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border: none;
+        border-radius: 6px;
+        font-size: 16px;
+        font-weight: 500;
+        cursor: pointer;
+        transition: transform 0.2s, box-shadow 0.2s;
+      }
+      .btn:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+      }
+      .btn:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+        transform: none;
+      }
+      .toggle-mode {
+        text-align: center;
+        margin-top: 20px;
+      }
+      .toggle-mode a {
+        color: #667eea;
+        text-decoration: none;
+        font-size: 14px;
+      }
+      .toggle-mode a:hover {
+        text-decoration: underline;
+      }
+      .error {
+        color: #e53e3e;
+        font-size: 14px;
+        margin-top: 10px;
+        text-align: center;
+        min-height: 20px;
+      }
+      .hidden {
+        display: none;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="login-container">
+      <div class="login-header">
+        <h1>PDIS</h1>
+        <p>个人决策智能支持系统</p>
+      </div>
+
+      <div id="loginForm">
+        <form onsubmit="handleLogin(event)">
+          <div class="form-group">
+            <label for="loginEmail">邮箱</label>
+            <input type="email" id="loginEmail" required placeholder="请输入邮箱" />
+          </div>
+          <div class="form-group">
+            <label for="loginPassword">密码</label>
+            <input type="password" id="loginPassword" required placeholder="请输入密码" />
+          </div>
+          <button type="submit" class="btn" id="loginBtn">登录</button>
+          <div class="error" id="loginError"></div>
+        </form>
+        <div class="toggle-mode">
+          <a href="#" onclick="toggleMode(event)">没有账号？立即注册</a>
+        </div>
+      </div>
+
+      <div id="registerForm" class="hidden">
+        <form onsubmit="handleRegister(event)">
+          <div class="form-group">
+            <label for="registerEmail">邮箱</label>
+            <input type="email" id="registerEmail" required placeholder="请输入邮箱" />
+          </div>
+          <div class="form-group">
+            <label for="registerPassword">密码</label>
+            <input type="password" id="registerPassword" required placeholder="请输入密码（至少6位）" minlength="6" />
+          </div>
+          <div class="form-group">
+            <label for="registerConfirmPassword">确认密码</label>
+            <input type="password" id="registerConfirmPassword" required placeholder="请再次输入密码" minlength="6" />
+          </div>
+          <div class="form-group">
+            <label for="registerDisplayName">昵称</label>
+            <input type="text" id="registerDisplayName" required placeholder="请输入昵称" />
+          </div>
+          <button type="submit" class="btn" id="registerBtn">注册</button>
+          <div class="error" id="registerError"></div>
+        </form>
+        <div class="toggle-mode">
+          <a href="#" onclick="toggleMode(event)">已有账号？立即登录</a>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      function toggleMode(e) {
+        e.preventDefault();
+        const loginForm = document.getElementById('loginForm');
+        const registerForm = document.getElementById('registerForm');
+        const loginError = document.getElementById('loginError');
+        const registerError = document.getElementById('registerError');
+
+        loginError.textContent = '';
+        registerError.textContent = '';
+
+        if (loginForm.classList.contains('hidden')) {
+          loginForm.classList.remove('hidden');
+          registerForm.classList.add('hidden');
+        } else {
+          loginForm.classList.add('hidden');
+          registerForm.classList.remove('hidden');
+        }
+      }
+
+      async function handleLogin(e) {
+        e.preventDefault();
+        const email = document.getElementById('loginEmail').value;
+        const password = document.getElementById('loginPassword').value;
+        const btn = document.getElementById('loginBtn');
+        const error = document.getElementById('loginError');
+
+        btn.disabled = true;
+        btn.textContent = '登录中...';
+        error.textContent = '';
+
+        try {
+          const resp = await fetch('/api/v1/auth/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email, password }),
+          });
+          const data = await resp.json();
+
+          if (!resp.ok) {
+            error.textContent = data.detail || '登录失败';
+            btn.disabled = false;
+            btn.textContent = '登录';
+            return;
+          }
+
+          window.location.href = '/';
+        } catch (err) {
+          error.textContent = '网络错误，请重试';
+          btn.disabled = false;
+          btn.textContent = '登录';
+        }
+      }
+
+      async function handleRegister(e) {
+        e.preventDefault();
+        const email = document.getElementById('registerEmail').value;
+        const password = document.getElementById('registerPassword').value;
+        const confirmPassword = document.getElementById('registerConfirmPassword').value;
+        const displayName = document.getElementById('registerDisplayName').value;
+        const btn = document.getElementById('registerBtn');
+        const error = document.getElementById('registerError');
+
+        if (password !== confirmPassword) {
+          error.textContent = '两次输入的密码不一致';
+          return;
+        }
+
+        btn.disabled = true;
+        btn.textContent = '注册中...';
+        error.textContent = '';
+
+        try {
+          const resp = await fetch('/api/v1/auth/register', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email, password, display_name: displayName }),
+          });
+          const data = await resp.json();
+
+          if (!resp.ok) {
+            error.textContent = data.detail || '注册失败';
+            btn.disabled = false;
+            btn.textContent = '注册';
+            return;
+          }
+
+          window.location.href = '/';
+        } catch (err) {
+          error.textContent = '网络错误，请重试';
+          btn.disabled = false;
+          btn.textContent = '注册';
+        }
+      }
+    </script>
+  </body>
+</html>

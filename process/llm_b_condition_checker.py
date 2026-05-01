@@ -38,10 +38,10 @@ class LLM_B_ConditionChecker:
 You are a structured input validation engine.
 Analyze the provided context to determine if all required information is present for analysis.
 Check for these required elements:
-1. Time information (date) must be provided
-2. Location information must be provided
-3. Scenario summary must be provided
-4. For each person mentioned, their personality_color must be present in the profile
+1. Scenario summary must be provided
+2. Time information (date) is recommended, but if missing you may still proceed and add follow-up questions
+3. Location information is optional unless it affects the decision materially
+4. For each person mentioned, MBTI is optional; if evidence is insufficient, ask for more evidence instead of blocking analysis
 
 INPUT CONTEXT:
 {json.dumps(context_data, ensure_ascii=False)}
@@ -84,9 +84,9 @@ INSTRUCTIONS:
             elif field.startswith("person_profile:"):
                 person_key = field.split(":")[1]
                 supplement.append(f"请提供更多关于{person_key}的信息，包括性格特点、沟通方式等")
-            elif field.startswith("personality_color:"):
+            elif field.startswith("mbti_evidence:"):
                 person_key = field.split(":")[1]
-                supplement.append(f"请描述{person_key}的性格特征和行为模式")
+                supplement.append(f"请补充{person_key}的行为证据，例如他在压力下/合作中/冲突中通常怎么做")
         
         return supplement
 
